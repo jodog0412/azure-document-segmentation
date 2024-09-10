@@ -3,3 +3,4 @@ python-dotenv
 azure-ai-documentintelligence
 azure-ai-vision-imageanalysis
 pymupdf
+openai

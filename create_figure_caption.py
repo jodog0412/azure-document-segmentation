@@ -1,4 +1,3 @@
-
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.ai.documentintelligence.models import AnalyzeResult, DocumentAnalysisFeature
@@ -35,30 +34,30 @@ def _in_span(word, spans):
             return True
     return False
 
-def split_pages_from_document(local_doc: str) -> tp.List[str]:
-    local_doc_name = local_doc.split('/')[-1].replace('.pdf','')
-    doc = pymupdf.open(local_doc)
+def split_pages_from_document(doc_path: str) -> tp.List[str]:
+    doc_name = doc_path.split('/')[-1].replace('.pdf','')
+    doc = pymupdf.open(doc_path)
     pages = []
     for idx in range(len(doc)):
         page = doc[idx]
-        pix = page.get_pixmap()
+        pix = page.get_pixmap(dpi=450)
 
-        local_page = f'{OUTPUT_DIR_PATH}/{local_doc_name}_P{idx}.jpg'
-        pages.append(local_page)
-        pix.save(local_page)
+        page_path = f'{OUTPUT_DIR_PATH}/{doc_name}_P{idx}.jpg'
+        pages.append(page_path)
+        pix.save(page_path)
     return pages
         
-def recognize_figs_from_page(local_page: str) -> tp.List[tp.List[int]]:
+def recognize_figs_from_page(page_path: str) -> tp.List[tp.List[int]]:
     document_intelligence_client = DocumentIntelligenceClient(
         endpoint=document_endpoint, 
         credential=AzureKeyCredential(document_api_key)
     )
 
-    with open(local_page, "rb") as f:
+    with open(page_path, "rb") as f:
         poller = document_intelligence_client.begin_analyze_document(
             "prebuilt-layout", 
             analyze_request=f, 
-            features=[DocumentAnalysisFeature.FORMULAS],  # Specify which add-on capabilities to enable
+            features=[],  # Specify which add-on capabilities to enable
             content_type="application/octet-stream"
         )
     result: AnalyzeResult = poller.result()
@@ -71,21 +70,21 @@ def recognize_figs_from_page(local_page: str) -> tp.List[tp.List[int]]:
                 bboxes.append(region.polygon)
     return bboxes
 
-def extract_figs(local_page: str, bboxes: tp.List[tp.List[int]]) -> list:
-    local_page_name = local_page.split('/')[-1].replace('.jpg','')
-    page = Image.open(local_page)
+def extract_figs(page_path: str, bboxes: tp.List[tp.List[int]]) -> list:
+    page_name = page_path.split('/')[-1].replace('.jpg','')
+    page = Image.open(page_path)
     figs = []
     for idx, bbox in enumerate(bboxes):
         xs, ys = bbox[::2], bbox[1::2]
         x1, y1, x2, y2 = min(xs), min(ys), max(xs), max(ys)
         fig = page.crop((x1, y1, x2, y2))
-        local_fig = f'{OUTPUT_DIR_PATH}/{local_page_name}_fig{idx}.jpg'
-        figs.append(local_fig)
-        fig.save(local_fig)
+        fig_path = f'{OUTPUT_DIR_PATH}/{page_name}_fig{idx}.jpg'
+        figs.append(fig_path)
+        fig.save(fig_path)
     return figs
 
-def create_fig_caption(local_fig: str) -> str:
-    with Image.open(local_fig) as fig:
+def create_fig_caption(fig_path: str) -> str:
+    with Image.open(fig_path) as fig:
         w, h = fig.size
         if w<50 or w>16000 or h<50 or h>16000:
             return "Invaild image size. Size of image is too small or big."
@@ -96,7 +95,7 @@ def create_fig_caption(local_fig: str) -> str:
     )
 
     # Load image to analyze into a 'bytes' object
-    with open(local_fig, "rb") as f:
+    with open(fig_path, "rb") as f:
         fig = f.read()
 
     # Get a caption for the image. This will be a synchronously (blocking) call.
